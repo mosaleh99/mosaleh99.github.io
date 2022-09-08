@@ -1,0 +1,1239 @@
+/// <reference path="../typings/jquery/jquery.d.ts" />
+// approximation of the now-deprecated jQuery.selector property. To track the input elements that are disabled by a spinner we need to remember the selector or
+// path that yielded the container of the spinner and 'remember' the elements in an object array.
+!(function ($, undefined) {
+    /// adapted http://jsfiddle.net/drzaus/Hgjfh/5/
+    var get_selector = function (element) {
+        var pieces = [];
+        for (; element && element.tagName !== undefined; element = element.parentNode) {
+            if (element.className) {
+                var classes = element.className.split(' ');
+                for (var i in classes) {
+                    if (classes.hasOwnProperty(i) && classes[i]) {
+                        pieces.unshift(classes[i]);
+                        pieces.unshift('.');
+                    }
+                }
+            }
+            if (element.id && !/\s/.test(element.id)) {
+                pieces.unshift(element.id);
+                pieces.unshift('#');
+            }
+            pieces.unshift(element.tagName);
+            pieces.unshift(' > ');
+        }
+        //way too much garbage at the beginning with modernizr in use, so start at the BODY tag
+        var str = pieces.slice(1).join('');
+        return str.substr(str.indexOf("BODY"));
+    };
+    $.fn.getSelector = function (only_one) {
+        if (true === only_one) {
+            return get_selector(this[0]);
+        }
+        else {
+            return $.map(this, function (el) {
+                return get_selector(el);
+            });
+        }
+    };
+})(window.jQuery);
+var _resizeHandler = 0;
+var _lastXResize = 0;
+// Put onload handling that should be run on ALL pages here. Do NOT use this for specific page setup.
+$(document).ready(function () {
+    //set mobile flag and handle view resizes into/out of mobile
+    Ellucian.Recruit.Mvc.IsMobile = (document.documentElement.clientWidth < Ellucian.Recruit.Mvc.MinDesktopSizeX);
+    //dynamically set any fields that should be read-only (Core framework disables them, which kills many of our POST calls due to missing data)
+    Ellucian.Recruit.Mvc.Forms.SetFieldsReadOnly(Ellucian.Recruit.Mvc.ReadOnlyFields);
+    //nav link styling
+    Ellucian.Recruit.Mvc.ResizeNav();
+    Ellucian.Recruit.Mvc.SetActiveNav();
+    _lastXResize = window.innerWidth;
+    $(window).resize(function () {
+        //if switching from non-mobile to mobile OR mobile to non-mobile, handle state
+        //if we ever need to handle any special scripting to fix UI when switching into/out of mobile size, put that code here
+        var mobileNow = (window.innerWidth < Ellucian.Recruit.Mvc.MinDesktopSizeX);
+        if (mobileNow && !Ellucian.Recruit.Mvc.IsMobile) {
+            //switching to mobile
+            Ellucian.Recruit.Mvc.IsMobile = true;
+            //have to unroll the overflow navigation stuff or else the mobile nav menu might get borked
+            $("li.collapsed-nav").hide();
+            $("#elcn-nav-main > li:not(.mobile-show):not(.collapsed-nav)").show();
+        }
+        else if (!mobileNow && Ellucian.Recruit.Mvc.IsMobile) {
+            //switching out of mobile
+            Ellucian.Recruit.Mvc.IsMobile = false;
+        }
+        if (_resizeHandler)
+            clearTimeout(_resizeHandler);
+        _resizeHandler = setTimeout(function () {
+            //make sure X dimension changed (don't care about Y)
+            if (_lastXResize === window.innerWidth)
+                return;
+            _lastXResize = window.innerWidth;
+            console.log("[] --> [  ]");
+            Ellucian.Recruit.Mvc.ResizeNav();
+            Ellucian.Recruit.Mvc.SetActiveNav();
+        }, 200);
+    });
+    //handle notification styling
+    Ellucian.Recruit.Mvc.closeNotification();
+    //form field tabbable fixes
+    Ellucian.Recruit.Mvc.FixFormFieldTabs();
+});
+var Ellucian;
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var _spinnerLoadingContent = null;
+            var _spinnerElementsReadonly = {};
+            var _spinnerElementsDisabled = {};
+            /**
+             * The minimum pixel size of non-mobile UI.
+             */
+            Mvc.MinDesktopSizeX = 768;
+            /**
+             * Reveals whether the site is currently sized for a mobile device.
+             * @type {boolean}
+             */
+            Mvc.IsMobile = false;
+            /**
+             * Stores various resources (strings, markup templates) from the MVC Controller.
+             * @type {object}
+             */
+            Mvc.WebResource = null;
+            /**
+             * A dynamic collection of fields, on any form on the page, that should be set to read-only.
+             * @type {Array}
+             */
+            Mvc.ReadOnlyFields = [];
+            /**
+             * Safe helper for getting a resource string.
+             * @param key {string} The key of the resource to get.
+             * @returns {string} The resource string if found, otherwise empty string.
+             */
+            function _WR(key) {
+                try {
+                    return Mvc.WebResource[key];
+                }
+                catch (e) {
+                    return "";
+                }
+            }
+            Mvc._WR = _WR;
+            /**
+             * Fixes form fields of type radio button not being tabbable in the UI. This is because of how we style these input types by
+             * hiding the real input elements and using ::before and ::after pseudo-class styling on them. Fixing here because any sort
+             * of "proper" fix in Core is going to be a mess.
+             */
+            function FixFormFieldTabs() {
+                //first find all containers on the page with class "crm-form", then look inside of them for all radio buttons where their
+                //immediate following sibling is a <label> and add the tabindex to that element
+                var formContainers = $("div.crm-form");
+                formContainers.each(function (i, e) {
+                    var ej = $(e);
+                    var inputs = ej.find("input[type=radio]");
+                    inputs.each(function (k, f) {
+                        var next = $(f).next();
+                        if (next.is("label") && !next.is("[tabindex]"))
+                            next.attr("tabindex", "0");
+                    });
+                });
+                //now we have to catch spacebar/enter keypress on these fake radio buttons to funnel that action to the actual input
+                $("label[tabindex]").keypress(function (e) {
+                    if (e.which === 32 || e.which === 13) {
+                        e.preventDefault();
+                        var input = $(e.target).prev();
+                        if (input.is("input[type=radio]"))
+                            input.click();
+                    }
+                });
+            }
+            Mvc.FixFormFieldTabs = FixFormFieldTabs;
+            /**
+             * Tries to find the nav link which matches the current URL (i.e. the 'active' link) and mark is as such visually. Should be called once on all page loads.
+             */
+            function SetActiveNav() {
+                //clear any old selections
+                $("#elcn-nav-main li").removeClass("active");
+                //first get all of the link blocks in the nav area that have an actual navigable link and have not been hidden by collapsing screen size
+                // (but we do want to include the ones that are temporarily exposed under the drop-down overflow menu)
+                var links = $("#elcn-nav-main a:not([href^='#']):not([href^='javascript:']):visible, #elcn-nav-main a.collapsed");
+                var toMark = null;
+                var toMarkCollapsed = null;
+                var t1, t2, t3, t4;
+                function _shaveOff(source, find) {
+                    var newStr = source.toLowerCase();
+                    find.forEach(function (f, i) {
+                        if (newStr.indexOf(f) >= 0)
+                            newStr = newStr.substr(0, newStr.indexOf(f));
+                    });
+                    return newStr;
+                }
+                //compare each of them with the window.location
+                t2 = _shaveOff(window.location.pathname, ["#", "?"]);
+                t4 = _shaveOff(window.location.href, ["#", "?"]);
+                var isInquiryIndicator = "isinquiry=true";
+                var isInquiry = window.location.href.toLowerCase().indexOf(isInquiryIndicator) > 0;
+                if (isInquiry) {
+                    $.each(links, function (i, l) {
+                        var linkLowercase = l.href.toLowerCase();
+                        //Before we shave off the querystring params see if client added link to Inquiry Page in nav bar
+                        //Create Account and Inquiry have the same .Pathname of     <site>/Account/Create
+                        //So we need to treat the inquiry nav bar item a little differently
+                        //If the current URL contains the link address, which contains IsInquiry=True then that is good enough
+                        //That link is our 'active' <li> to highlight
+                        //If the current URL contains 'isinquiry=true' then just try and find the first navbar item with 'isinquiry=true' in the address
+                        //The regular create account link will get picked up in the .each below since that trims off querystring params
+                        //The second part of this IF makes sure you dont have something like  /Events?IsInquiry=true
+                        if (linkLowercase.indexOf(isInquiryIndicator) >= 0 && window.location.pathname.toLowerCase().indexOf(l.pathname.toLowerCase()) >= 0) {
+                            var li = $(links[i]);
+                            toMark = li.parent();
+                            if (li.hasClass("collapsed")) {
+                                toMarkCollapsed = toMark;
+                                toMark = li.parents().eq(2);
+                            }
+                            return false;
+                        }
+                    });
+                }
+                if (toMark == null) {
+                    $.each(links, function (i, l) {
+                        //shave off any query params or anchors, since those shouldn't affect matching
+                        t1 = _shaveOff(l.pathname, ["#", "?"]);
+                        t3 = _shaveOff(l.href, ["#", "?"]);
+                        //exact match
+                        if (t1 == t2 || t3 == t4) {
+                            var li = $(links[i]);
+                            toMark = li.parent();
+                            if (li.hasClass("collapsed")) {
+                                toMarkCollapsed = toMark;
+                                toMark = li.parents().eq(2);
+                            }
+                            return false;
+                        }
+                        //see if there's a slash mismatch and still count it
+                        if (!t1.endsWith("/"))
+                            t1 = t1 + "/";
+                        if (!t2.endsWith("/"))
+                            t2 = t2 + "/";
+                        if (t1 == t2) {
+                            var li = $(links[i]);
+                            toMark = li.parent();
+                            if (li.hasClass("collapsed")) {
+                                toMarkCollapsed = toMark;
+                                toMark = li.parents().eq(2);
+                            }
+                            return false;
+                        }
+                        if (!t3.endsWith("/"))
+                            t3 = t3 + "/";
+                        if (!t4.endsWith("/"))
+                            t4 = t4 + "/";
+                        if (t3 == t4) {
+                            var li = $(links[i]);
+                            toMark = li.parent();
+                            if (li.hasClass("collapsed")) {
+                                toMarkCollapsed = toMark;
+                                toMark = li.parents().eq(2);
+                            }
+                            return false;
+                        }
+                    });
+                }
+                if (toMarkCollapsed)
+                    toMarkCollapsed.children().first().addClass("active-collapsed");
+                if (toMark)
+                    toMark.addClass("active");
+                else {
+                    //a lot of the application and apply pages may not match any of the default menu structure, so fall back to the 'Apply Online' item if it's there
+                    if (t2.indexOf("/application/apply") >= 0 || t4.indexOf("/application/apply") >= 0 ||
+                        t2.indexOf("/application/application") >= 0 || t4.indexOf("/application/application") >= 0) {
+                        var lookFor_1 = "/application/applicationlist";
+                        var u_1, match = links.filter(function (i, e) {
+                            u_1 = e.href.toLowerCase();
+                            return u_1.endsWith(lookFor_1) || u_1.endsWith(lookFor_1 + "/");
+                        });
+                        if (match && match.length > 0) {
+                            var li = match.first();
+                            if (li.hasClass("collapsed")) {
+                                li.parents().eq(2).addClass("active");
+                                li.addClass("active-collapsed");
+                            }
+                            else
+                                li.parent().addClass("active");
+                        }
+                    }
+                }
+            }
+            Mvc.SetActiveNav = SetActiveNav;
+            /**
+             * Attempts to resize the (non-mobile) navigation bar so that it never overflows and hides content or encounters similar
+             * visual artifacts. This function should be called on viewport resize events to maintain proper sizing at all times.
+             * This function will not have any effect on the mobile version of the nav menu.
+             */
+            function ResizeNav() {
+                if (Mvc.IsMobile)
+                    return;
+                //figure out the max width we have to work with
+                //  (viewport width - width of logo - width of user block [if showing])
+                var avail = Math.floor(document.documentElement.clientWidth - $("a.recruit-navbar-logo").outerWidth());
+                if ($("ul.navbar-right.mobile-hide").length === 1)
+                    avail = Math.floor(avail - $("ul.navbar-right.mobile-hide").outerWidth());
+                else
+                    avail -= 15; //if the user box is not showing there will still be a 15px margin on the right
+                var availOrig = avail;
+                //always start with assuming the MORE item is NOT there
+                var items = $("#elcn-nav-main > li:not(.mobile-show):not(.collapsed-nav)");
+                var fit = [];
+                var wontFit = [];
+                //partition all nav links into two arrays: items that WILL fit and ones that WON'T
+                items.each(function (i, e) {
+                    avail -= _hiddenWidth($(e));
+                    if (avail >= 0)
+                        fit.push(e);
+                    else
+                        wontFit.push(e);
+                });
+                //if at least one won't fit, see how big the MORE item would be and determine if we need to lose another item+
+                if (wontFit.length > 0) {
+                    var more = $("li.collapsed-nav");
+                    var moreWidth = _hiddenWidth(more);
+                    avail = availOrig - moreWidth;
+                    var wontFitMore = fit.filter(function (e, i) {
+                        avail -= _hiddenWidth($(e));
+                        return avail < 0;
+                    });
+                    if (wontFitMore.length > 0) {
+                        fit.splice(fit.length - wontFitMore.length); //shave off the ones that will no longer fit on account of MORE being added
+                        wontFit.unshift.apply(//shave off the ones that will no longer fit on account of MORE being added
+                        wontFit, wontFitMore); //add that set to the beginning of the WON'T FIT array
+                    }
+                    //now we need to hide the ones that won't fit, show the ones that will, show the MORE item and build a dynamic drop-down list under it
+                    fit.forEach(function (e, i) { return $(e).show(); });
+                    var html_1 = "";
+                    var a_1 = null;
+                    wontFit.forEach(function (e, i) {
+                        $(e).hide();
+                        a_1 = $(e).children().first()[0]; //every item should just be <li><a>...</a></li>
+                        if (a_1)
+                            html_1 += "<li><a href='" + a_1.href + "' class='collapsed'>" + a_1.text + "</a></li>";
+                    });
+                    $("ul.more-menu").empty().html(html_1);
+                    $("li.collapsed-nav").show();
+                }
+                else {
+                    //everything fits, so show all links and hide the MORE item
+                    fit.forEach(function (e, i) { return $(e).show(); });
+                    $("li.collapsed-nav").hide();
+                    $("#ul.more-menu").hide();
+                }
+                //compute the width of an element even if it's currently not occupying space in the DOM tree - a real version of this would be more comprehensive, 
+                //but we have a controlled domain of usage. Always round up using Math.ceil() to be sure half-pixel interpolation should never burn us!
+                function _hiddenWidth(elem) {
+                    if (elem.is(":visible"))
+                        return Math.ceil(elem.outerWidth());
+                    else {
+                        var v = elem.css("visibility");
+                        elem.css({ visibility: "hidden", display: "block" });
+                        var w = Math.ceil(elem.outerWidth());
+                        elem.css({ visibility: v, display: "none" });
+                        return w;
+                    }
+                }
+            }
+            Mvc.ResizeNav = ResizeNav;
+            /**
+             * Shows a spinner element in the specified parent container/ full page.
+             * @param parent {JQuery} The container into which to place the spinner.
+             * Will show a full page spinner when @param parent is null
+             */
+            function ShowSpinner(parent) {
+                //CAUTION: if you modify this function, you must ensure that input fields (e.g. textbox) are set to readonly and buttons are set to disabled.
+                //Setting input fields to disabled will disrupt form processing because disabled fields do not get POSTed. (see the functions below)
+                if (parent == null) {
+                    $("#elcn-full-page-spinner").fadeIn(250);
+                    //find currently-enabled inputs and disable them
+                    _setSpinnerReadonlyDisabled();
+                }
+                else if (parent) {
+                    //if container already appears to have spinner, bail now
+                    if ($("div.elcn-spinner-wrapper", parent).length > 0)
+                        return;
+                    if (!_spinnerLoadingContent) {
+                        _spinnerLoadingContent = _WR("MVC_LoadingPlaceholder");
+                    }
+                    if (parent.css("position") !== "relative") {
+                        parent.css("position", "relative");
+                    }
+                    //hide overflow so phantom scrollbars don't appear
+                    if ((parent.attr("style") || "").toLowerCase().indexOf("overflow-x") >= 0) {
+                        parent.attr("data-prevoverflowx", parent.css("overflow-x"));
+                    }
+                    parent.css("overflow-x", "hidden");
+                    if ((parent.attr("style") || "").toLowerCase().indexOf("overflow-y") >= 0) {
+                        parent.attr("data-prevoverflowy", parent.css("overflow-y"));
+                    }
+                    parent.css("overflow-y", "hidden");
+                    var spinHtml = $.parseHTML("<div class='recruit-spinner-wrapper'><div class='loader child-spinner'>" + _spinnerLoadingContent + "</div></div>")[0];
+                    parent.append(spinHtml);
+                    $(".recruit-spinner-wrapper").fadeIn(250);
+                    //find currently-enabled inputs and disable them
+                    _setSpinnerReadonlyDisabled(parent);
+                }
+            }
+            Mvc.ShowSpinner = ShowSpinner;
+            /**
+             * Hides all spinner elements in the specified parent container.
+             * @param parent {JQuery} The container from which to remove all spinners.
+             */
+            function HideSpinner(parent) {
+                if (parent == null) {
+                    $("#elcn-full-page-spinner").stop().fadeOut(250);
+                    //re-enable the things that were disabled and readonly on set
+                    _unsetSpinnerReadonlyDisabled();
+                }
+                else if (parent) {
+                    parent.find(".recruit-spinner-wrapper").fadeOut(250).remove();
+                    var overflow = parent.attr("data-prevoverflowx");
+                    if (overflow) {
+                        parent.css("overflow-x", overflow);
+                    }
+                    else {
+                        parent.css("overflow-x", "");
+                    }
+                    overflow = parent.attr("data-prevoverflowy");
+                    if (overflow) {
+                        parent.css("overflow-y", overflow);
+                    }
+                    else {
+                        parent.css("overflow-y", "");
+                    }
+                    parent.attr("data-prevoverflowx", "");
+                    parent.attr("data-prevoverflowy", "");
+                    //re-enable the things that were disabled and readonly on set
+                    _unsetSpinnerReadonlyDisabled(parent);
+                }
+            }
+            Mvc.HideSpinner = HideSpinner;
+            function _setSpinnerReadonlyDisabled(parent) {
+                var fields = $("input:enabled:not([readonly]):not([type=button]):not([type=submit]):not([type=image])", parent ? parent : $(document));
+                var buttons = $("button:enabled, input:enabled[type=button], input:enabled[type=submit], input:enabled[type=image]", parent ? parent : $(document));
+                var index = parent ? parent.getSelector() : "**";
+                _spinnerElementsReadonly[index] = fields;
+                //use a timeout on disabling things so that the initial action, e.g. click, are not interrupted
+                setTimeout(function () { fields.prop("readonly", true); }, 10);
+                _spinnerElementsDisabled[index] = buttons;
+                setTimeout(function () { buttons.prop("disabled", true); }, 10);
+            }
+            function _unsetSpinnerReadonlyDisabled(parent) {
+                var index = parent ? parent.getSelector() : "**";
+                var itemsR = _spinnerElementsReadonly[index];
+                var itemsD = _spinnerElementsDisabled[index];
+                //the timeouts here should be longer than the one used in the disabling part above so nothing ever gets disabled AFTER enabling it
+                if (itemsR) {
+                    setTimeout(function () {
+                        itemsR.prop("readonly", false);
+                        _spinnerElementsReadonly[index] = null;
+                    }, 20);
+                }
+                if (itemsD) {
+                    setTimeout(function () {
+                        itemsD.prop("disabled", false);
+                        _spinnerElementsDisabled[index] = null;
+                    }, 20);
+                }
+            }
+            /**
+             * Shows a error modal dialog.
+             * @param title {string} The title of the dialog. Will use a default if not provided.
+             * @param message {string} The full message to show. Will use a default if not provided.
+             */
+            function ShowErrorDialog(title, message) {
+                if (title) {
+                    $("#elcn-error-dialog-title").text(title);
+                }
+                else {
+                    $("#elcn-error-dialog-title").text(_WR("MVC_ErrorDialog_DefaultTitle"));
+                }
+                if (message) {
+                    $("#elcn-error-dialog-msg").text(message);
+                }
+                else {
+                    $("#elcn-error-dialog-msg").text(_WR("MVC_ErrorDialog_DefaultMessage"));
+                }
+                $("#elcn-full-page-error").fadeIn(250);
+                _setSpinnerReadonlyDisabled();
+                setTimeout(function () {
+                    $("#elcn-error-dialog-ok").prop("disabled", false);
+                    $("#elcn-error-dialog-ok").focus();
+                }, 50);
+            }
+            Mvc.ShowErrorDialog = ShowErrorDialog;
+            /**
+             * Clears the error modal dialog.
+             */
+            function HideErrorDialog() {
+                $("#elcn-full-page-error").fadeOut(100);
+                _unsetSpinnerReadonlyDisabled();
+            }
+            Mvc.HideErrorDialog = HideErrorDialog;
+            /**
+             * Sorts a table with the given ID's rows based on the values in the designated column. This is generally a simple string-based sort,
+             * but will handle numeric columns as well.
+             * @param tableId {string} The ID of the table to sort. Do not prefix this with a '#'.
+             * @param colNumber {number} The column number to sort on, 0-based.
+             * @param ascending {boolean} Whether to perform an ascending sort. Defaults to true, but if set to false then a descending sort will be used.
+             */
+            function SortTableByRow(tableId, colNumber, ascending) {
+                if (ascending === void 0) { ascending = true; }
+                if (!tableId)
+                    return;
+                if (tableId[0] === '#')
+                    tableId = tableId.substr(1);
+                var rows = $("#" + tableId + " tbody tr").get();
+                var dir = (ascending == true) ? 1 : -1;
+                rows.sort(function (a, b) {
+                    var A = $(a).children("td").eq(colNumber).text().trim().toUpperCase();
+                    if ($.isNumeric(A))
+                        A = (A % 1 === 0) ? parseInt(A) : parseFloat(A);
+                    var B = $(b).children("td").eq(colNumber).text().trim().toUpperCase();
+                    if ($.isNumeric(B))
+                        B = (B % 1 === 0) ? parseInt(B) : parseFloat(B);
+                    return (A < B) ? (-1 * dir) : (A > B) ? (1 * dir) : 0;
+                });
+                $("#" + tableId + " tbody").empty();
+                $.each(rows, function (i, r) {
+                    $("#" + tableId + " tbody").append(r);
+                });
+            }
+            Mvc.SortTableByRow = SortTableByRow;
+            /**
+             * Handles a timed-out session response to an Ajax call, redirecting to the login page as necessary.
+             */
+            function HandleAjaxTimeout() {
+                var ret = window.location.href.toLowerCase();
+                var bp = Ellucian.Recruit.Mvc.Data.AppRootFolder.toLowerCase();
+                if (ret.indexOf(bp) >= 0)
+                    ret = "/" + ret.substr(ret.indexOf(bp));
+                else
+                    ret = "";
+                window.location.href = Ellucian.Recruit.Mvc.Data.BasePath + "/Account/Login?returnUrl=" + encodeURIComponent(ret);
+            }
+            Mvc.HandleAjaxTimeout = HandleAjaxTimeout;
+            /**
+             * Provides various utility script functionality.
+             * @class
+             */
+            var Utilities = /** @class */ (function () {
+                function Utilities() {
+                }
+                /**
+                 * Formats a string in .NET style using placeholders ('{n}').
+                 * @param src {string} The source string containing placeholders.
+                 * @param params {array} Parameter array of strings (any size).
+                 * @returns {string} The formatted string.
+                 */
+                Utilities.FormatString = function (src) {
+                    var params = [];
+                    for (var _i = 1; _i < arguments.length; _i++) {
+                        params[_i - 1] = arguments[_i];
+                    }
+                    if (src == null)
+                        return "";
+                    var replaced = src;
+                    for (var i = 0; i < params.length; i++) {
+                        var match = "{" + i + "}";
+                        var index = replaced.indexOf(match);
+                        while (index !== -1) {
+                            replaced = replaced.replace(match, params[i] ? params[i].toString() : " ");
+                            index = replaced.indexOf(match);
+                        }
+                    }
+                    return replaced;
+                };
+                /**
+                 * Safety-encodes a string for storage and display.
+                 * @param {string} input The input string to encode.
+                 * @returns {string} The encoded string.
+                 */
+                Utilities.SafeString = function (input) {
+                    var div = document.createElement("div");
+                    div.appendChild(document.createTextNode(input));
+                    return div.innerHTML;
+                };
+                /**
+                 * Determines whether a given string represents a number. So, both 12 and "12" are numbers, but "12a" is not.
+                 * @param {string} numString The number in string format.
+                 * @returns {boolean} True if the string is also a literal number, otherwise false.
+                 */
+                Utilities.IsNumber = function (numString) {
+                    if (!numString)
+                        return false;
+                    return !isNaN(parseFloat(numString)) && isFinite(numString);
+                };
+                /**
+                 * Given a GUID as a string, strips off the leading and trailing braces and normalizes it to all lower-case.
+                 * @param {string} guid The GUID as a string.
+                 * @returns {string} The normalized GUID, in lower-case and with braces removed.
+                 */
+                Utilities.NormalizeGuid = function (guid) {
+                    if (!guid)
+                        return "";
+                    if (guid.length < 2)
+                        return guid;
+                    if (guid.indexOf("{") === 0 && guid.indexOf("}") === guid.length - 1)
+                        guid = guid.substr(1, guid.length - 2);
+                    guid = guid.toLowerCase();
+                    return guid;
+                };
+                /**
+                 * Checks to see if two GUIDs are equal, accounting for differences in brace usage and casing.
+                 * @param {string} guid1 The first GUID to compare.
+                 * @param {string} guid2 The second GUID to compare.
+                 * @returns {boolean} True if the GUID can be considered the same, otherwise false.
+                 */
+                Utilities.AreGuidsEqual = function (guid1, guid2) {
+                    if (!guid1 || !guid2)
+                        return false;
+                    return this.NormalizeGuid(guid1) === this.NormalizeGuid(guid2);
+                };
+                return Utilities;
+            }());
+            Mvc.Utilities = Utilities;
+            /**
+             * Handle notification close button functionality
+             */
+            function closeNotification() {
+                /* Handle both a click event and a keyboard enter (keycode 13) for accessibility */
+                $("body").on("click keypress", ".approved-close-icon", function (e) {
+                    if (e.type == "click" || (e.keyCode != null && e.keyCode === 13)) {
+                        $(".card-approved-notification").hide();
+                    }
+                });
+                $("body").on("click keypress", ".warning-close-icon", function (e) {
+                    if (e.type == "click" || (e.keyCode != null && e.keyCode === 13)) {
+                        $(".card-warning-notification").hide();
+                    }
+                });
+                $("body").on("click keypress", ".error-close-icon", function (e) {
+                    if (e.type == "click" || (e.keyCode != null && e.keyCode === 13)) {
+                        $(".validation-summary-errors").hide();
+                    }
+                });
+            }
+            Mvc.closeNotification = closeNotification;
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var Forms;
+            (function (Forms) {
+                /**
+                 * Dynamically sets a collection of input fields to be read-only.
+                 * @param fields {Array} The collection of fields
+                 */
+                function SetFieldsReadOnly(fields) {
+                    if (fields && fields.length > 0) {
+                        var item = null;
+                        for (var _i = 0, fields_1 = fields; _i < fields_1.length; _i++) {
+                            var x = fields_1[_i];
+                            item = document.getElementById(x);
+                            if (item)
+                                item.readOnly = true;
+                        }
+                    }
+                }
+                Forms.SetFieldsReadOnly = SetFieldsReadOnly;
+                function AddFormSpinner(formId, buttonId) {
+                    //login wait spinner
+                    $("#" + buttonId).click(function (e) {
+                        if ($('#' + formId).valid()) {
+                            Ellucian.Recruit.Mvc.ShowSpinner($('#' + formId).parent());
+                        }
+                    });
+                }
+                Forms.AddFormSpinner = AddFormSpinner;
+            })(Forms = Mvc.Forms || (Mvc.Forms = {}));
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var OrganizationControl;
+            (function (OrganizationControl) {
+                function LoadCountries(field) {
+                    var countrySelect = $("#" + field);
+                    Ellucian.Recruit.Mvc.Data.GetCountries()
+                        .done(function (data) {
+                        $.each(data, function (index, value) {
+                            countrySelect.append($('<option/>', {
+                                value: value.Id,
+                                text: value.Name
+                            }));
+                        });
+                    })
+                        .fail(function (xhr, ajaxOptions, thrownError) {
+                    });
+                }
+                OrganizationControl.LoadCountries = LoadCountries;
+                function LoadStates(countryid, stateid) {
+                    var countrySelected = $("#" + countryid).val();
+                    Ellucian.Recruit.Mvc.Data.GetStates(countrySelected)
+                        .done(function (data) {
+                        var stateList = $("#" + stateid);
+                        var label = $("label[for='" + stateid + "']");
+                        if (data.length > 0) {
+                            //make state visible
+                            label.attr('style', 'display:inline-block');
+                            stateList.attr('style', 'display:inline-block');
+                        }
+                        else {
+                            stateList.attr('style', 'display:none');
+                            label.attr('style', 'display:none');
+                        }
+                        $.each(data, function (index, value) {
+                            stateList.append($('<option/>', {
+                                value: value.Id,
+                                text: value.Name
+                            }));
+                        });
+                    })
+                        .fail(function (xhr, ajaxOptions, thrownError) {
+                    });
+                }
+                OrganizationControl.LoadStates = LoadStates;
+                function PerformOrganizationSearch(namefield, countryfield, statefield, cityfield, view, resultsfield, namedisplayfield) {
+                    var n = $("#" + namefield).val();
+                    var c = $("#" + countryfield).val();
+                    var s = $("#" + statefield).val();
+                    var t = $("#" + cityfield).val();
+                    var spanPrevName = $("#" + namefield).parent().prev("span");
+                    var spanName = $("#" + namefield).next("span");
+                    var spanCity = $("#" + cityfield).next("span");
+                    if (c == "0") {
+                        c = "";
+                    }
+                    if (s == "0") {
+                        s = "";
+                    }
+                    //validate search
+                    //make sure that we have atleast one searching criteria
+                    if (c == 0 && s.length == 0 && t.length == 0 && n.length == 0) {
+                        spanPrevName.addClass('field-validation-error').removeClass('field-validation-valid').html(Ellucian.Recruit.Mvc._WR("OrganizationSearchValidationError"));
+                        return false;
+                    }
+                    var returnvalmsg = false;
+                    //if the school name or city was entered validate the min length of was supplied
+                    if (n.length > 0 && n.length < 3) {
+                        spanName.addClass('field-validation-error').removeClass('field-validation-valid').html(Ellucian.Recruit.Mvc._WR("OrganizationSearchNameValidation"));
+                        returnvalmsg = true;
+                    }
+                    if (t.length > 0 && t.length < 3) {
+                        spanCity.addClass('field-validation-error').removeClass('field-validation-valid').html(Ellucian.Recruit.Mvc._WR("OrganizationSearchCityValidation"));
+                        returnvalmsg = true;
+                    }
+                    if (returnvalmsg) {
+                        return false;
+                    }
+                    spanPrevName.removeClass('field-validation-error').addClass('field-validation-valid');
+                    spanName.removeClass('field-validation-error').addClass('field-validation-valid');
+                    spanCity.removeClass('field-validation-error').addClass('field-validation-valid');
+                    spanName.text("");
+                    spanCity.text("");
+                    spanPrevName.text("");
+                    /*Ellucian.Recruit.Mvc.Data.GetOrganizations(n, c, s, t, view)
+                        .done(function (data) {
+            
+                        })
+                        .fail(function (xhr, ajaxOptions, thrownError) {
+            
+                        });*/
+                }
+                OrganizationControl.PerformOrganizationSearch = PerformOrganizationSearch;
+                function SetOrganization(idfield, namedisplayfield, radiobuttontable, searchcontainer, selectedorgcontainerid) {
+                    //find the field where we need to store the selected value
+                    var id = $("#" + idfield);
+                    var table = $("#" + radiobuttontable);
+                    var selectedradio = table.find('input[name=org]:checked');
+                    var radiotext = $("label[for='" + selectedradio.attr("id") + "']");
+                    //set the org id that will be saved
+                    id.val(selectedradio.val());
+                    //set the description in the texbox the user can see
+                    var nameDisplayEle = $("#" + namedisplayfield);
+                    nameDisplayEle.show();
+                    nameDisplayEle.val(radiotext.text());
+                    //hide search
+                    $('#' + searchcontainer).attr("style", "display:none");
+                    ShowSelectedOrgButtons(selectedorgcontainerid);
+                }
+                OrganizationControl.SetOrganization = SetOrganization;
+                function ClearOrg(textbox, lookupid, entitylogicalname, namedisplayfield) {
+                    var t = $("#" + textbox);
+                    var v = $("#" + lookupid);
+                    t.val("");
+                    t.hide();
+                    v.val("");
+                    //clear the search control values as well
+                    var name = entitylogicalname + "_text_custom" + lookupid;
+                    var country = entitylogicalname + "_country_custom" + lookupid;
+                    var state = entitylogicalname + "_state_custom" + lookupid;
+                    var city = entitylogicalname + "_city_custom" + lookupid;
+                    var results = entitylogicalname + "_results" + lookupid;
+                    var searchContainer = entitylogicalname + "_search_container" + lookupid;
+                    var selectedOrgContainer = entitylogicalname + "_selected_container" + lookupid;
+                    var selectdiv = entitylogicalname + "_select" + lookupid;
+                    $("#" + name).val("");
+                    $("#" + country).val("");
+                    $("#" + state).val("");
+                    $("#" + city).val("");
+                    $("#" + results).empty();
+                    $("#" + selectdiv).attr("style", "display:none");
+                    DisplaySearch(searchContainer, selectedOrgContainer);
+                }
+                OrganizationControl.ClearOrg = ClearOrg;
+                function DisplaySearch(searchcontainer, selectedorgcontainerid) {
+                    $('#' + searchcontainer).show();
+                    HideSelectedOrgButtons(selectedorgcontainerid);
+                }
+                OrganizationControl.DisplaySearch = DisplaySearch;
+                function HideSearch(textboxId, unlistedId) {
+                    var textbox = $("#" + textboxId);
+                    var container = getFieldDivFromInput(textbox);
+                    if (unlistedId && unlistedId.length > 0)
+                        ShowUnlistedField(unlistedId);
+                    container.find("input[type='hidden'],input[type='text'],select").val("");
+                    container.hide();
+                }
+                OrganizationControl.HideSearch = HideSearch;
+                function HideUnlistedField(id) {
+                    toggleUnlisted(id, false);
+                }
+                OrganizationControl.HideUnlistedField = HideUnlistedField;
+                function ShowUnlistedField(id) {
+                    toggleUnlisted(id, true);
+                }
+                OrganizationControl.ShowUnlistedField = ShowUnlistedField;
+                function ShowSelectedOrgButtons(selectedOrgContainerId) {
+                    toggleSelectedOrgButtons(selectedOrgContainerId, true);
+                }
+                OrganizationControl.ShowSelectedOrgButtons = ShowSelectedOrgButtons;
+                function HideSelectedOrgButtons(selectedOrgContainerId) {
+                    toggleSelectedOrgButtons(selectedOrgContainerId, false);
+                }
+                OrganizationControl.HideSelectedOrgButtons = HideSelectedOrgButtons;
+                function toggleSelectedOrgButtons(selectedOrgContainerId, show) {
+                    var container = $("#" + selectedOrgContainerId);
+                    /*const buttons = $("#" + selectedOrgContainerId)
+                        .find("input[type='button']")
+                        .filter("[id*='clear'],[id*='browse']");*/
+                    show ? container.show() : container.hide();
+                }
+                function toggleUnlisted(id, show) {
+                    if (id && id.length > 0) {
+                        var textArea = $("#" + id);
+                        var field = getFieldDivFromInput(textArea);
+                        if (field && field.length > 0) {
+                            show ? field.show() : field.hide();
+                        }
+                    }
+                }
+                function getFieldDivFromInput(input) {
+                    return input.parents(".field").first();
+                }
+            })(OrganizationControl = Mvc.OrganizationControl || (Mvc.OrganizationControl = {}));
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var OrganizationSearchControl = /** @class */ (function () {
+                function OrganizationSearchControl(id, unlistedInfoId, homeSchoolFlagId) {
+                    var _this = this;
+                    this.id = id;
+                    this.organizationView = null;
+                    this.timeout = null;
+                    this.lastQuery = null;
+                    this.lastCountry = null;
+                    this.lastState = null;
+                    this.conditionallyHidden = [];
+                    this._orgTypeHighSchool = "hs";
+                    this._orgTypeCollege = "co";
+                    this.valueInput = $("#" + id);
+                    var parentContainer = this.valueInput.parents(".subform .container").first();
+                    //Try to figure out what org types we are filtering on. It could a subform for HS or CO academic history
+                    //It could be parent education lookups, it could a clients custom lookup to schools or nonschools
+                    //So unless we can specifically figure out the type we cannot filter on it
+                    //If we cannot filter on it then our query ultimately will not have a CEEB Validation filter
+                    //so then it is on the client to set up custom views for that lookup if they are getting too many results for a query
+                    this.orgType = "";
+                    if (parentContainer.length && parentContainer.attr("id")) {
+                        //Subforms for academic history... check the entity involved
+                        if (parentContainer.attr("id").toString().indexOf("datatel_highschoolacademichistory") >= 0) {
+                            this.orgType = this._orgTypeHighSchool;
+                        }
+                        if (parentContainer.attr("id").toString().indexOf("datatel_collegeacademichistory") >= 0) {
+                            this.orgType = this._orgTypeCollege;
+                        }
+                    }
+                    else if (this.valueInput.attr("id")) {
+                        //Not in a subform so look at the lookup id 
+                        if (this.valueInput.attr("id").toString().indexOf("college") >= 0) {
+                            this.orgType = this._orgTypeCollege;
+                        }
+                        if (this.valueInput.attr("id").toString().indexOf("highschool") >= 0) {
+                            this.orgType = this._orgTypeHighSchool;
+                        }
+                    }
+                    //Change label on Not Found button away from school to generic organization
+                    if (this.orgType != this._orgTypeHighSchool && this.orgType != this._orgTypeCollege) {
+                        $(".elcn-not-found").prop('value', Ellucian.Recruit.Mvc._WR("MVC_OrgNotFoundButtonText"));
+                    }
+                    this.lookupContainer = this.valueInput.parents(".field").first();
+                    //Get the default view that is set on the lookup to Organization on the subform form
+                    this.organizationView = (this.lookupContainer.length) ? this.lookupContainer.attr("data-default-viewid") : "";
+                    var allMyRows = parentContainer.children(".row");
+                    this.allMyDivs = allMyRows.find(".field");
+                    this.areWeHidden = false;
+                    // this is to remove the org selection related inputs from our list that we will toggle
+                    this.allMyDivs = this.allMyDivs.filter(function (index) {
+                        if ($(this).find("#" + unlistedInfoId).length > 0)
+                            return false;
+                        if ($(this).find("#" + id).length > 0)
+                            return false;
+                        if (homeSchoolFlagId.length > 0 && $(this).find("#" + homeSchoolFlagId).length > 0)
+                            return false;
+                        return true;
+                    });
+                    this.unlistedInfoInput = unlistedInfoId ? $("#" + unlistedInfoId) : $();
+                    this.unlistedInfoField = unlistedInfoId ? this.unlistedInfoInput.parents(".field").first() : $();
+                    this.homeSchoolField = homeSchoolFlagId ? $("#" + homeSchoolFlagId) : $();
+                    this.instructions = this.lookupContainer.find(".field-instructions");
+                    this.clearButton = this.lookupContainer.find(".elcn-clear-org");
+                    this.queryInput = this.lookupContainer.find(".elcn-query-input");
+                    this.validationSpan = this.lookupContainer.find("span.elcn-query-validation");
+                    this.countryInput = this.lookupContainer.find(".elcn-country-input");
+                    this.stateInput = this.lookupContainer.find(".elcn-state-input");
+                    this.notFoundButton = this.lookupContainer.find("input.elcn-not-found");
+                    this.notFoundButtonGroup = this.lookupContainer.find("div.elcn-not-found");
+                    this.resultsArea = this.lookupContainer.find(".elcn-results-area");
+                    this.resultsHeader = this.lookupContainer.find("span.elcn-results-header");
+                    this.resultsHeader.text(Ellucian.Recruit.Mvc._WR("OrganizationSearchResultsLabel"));
+                    this.resultsList = this.lookupContainer.find(".list-group");
+                    this.resultsMessage = this.lookupContainer.find(".elcn-results-message");
+                    this.searchForm = this.lookupContainer.find(".elcn-search-form");
+                    this.selectedLabel = this.lookupContainer.find("#elcn-selected-org-text");
+                    this.selectedOrg = this.lookupContainer.find("div.elcn-selected-org");
+                    this.goBackButtonRow = this.addGoBackButton();
+                    if (this.unlistedInfoInput.val() || this.isHomeSchoolChecked()) {
+                        this.showUnlisted();
+                    }
+                    else {
+                        this.hideUnlisted();
+                        // If we have a school selected initially, hide the field instructions.
+                        if (this.valueInput.val()) {
+                            this.instructions.hide();
+                        }
+                    }
+                    // Need to build conditionallyVisible list before our logic runs the very first time because without it if a school, unlisted, homeschooled has been filled out
+                    // we want the form to load as it should but our logic is predicated on the conditionallyHidden list being setup.
+                    var parentThis = this;
+                    this.allMyDivs.each(function () {
+                        // this is basically checking for display:none
+                        if ($(this).css('display') == 'none') {
+                            parentThis.conditionallyHidden.push(this);
+                        }
+                    });
+                    this.academicFieldsVisibility();
+                    // Hook up events
+                    this.clearButton.click(function () { return _this.clear(); });
+                    this.notFoundButton.click(function () { return _this.showUnlisted(); });
+                    this.queryInput
+                        .keyup(function () { return _this.search(); })
+                        .keypress(function (event) { return _this.stopEnterKeyPropogation(event); });
+                    this.countryInput.change(function () {
+                        _this.loadStates();
+                        _this.search();
+                    });
+                    this.stateInput.change(function () { return _this.search(); });
+                    this.homeSchoolField.change(function (event) {
+                        if (event.currentTarget.checked) {
+                            _this.showUnlisted();
+                            _this.clear();
+                        }
+                        else {
+                            // Clear form in case "Home School" is the selected school.
+                            // This is possible if the student saves the form and navigates back.
+                            _this.clear();
+                            _this.hideUnlisted();
+                        }
+                        _this.academicFieldsVisibility();
+                    });
+                    this.unlistedInfoInput
+                        .keyup(function () { return _this.academicFieldsVisibility(); })
+                        .keypress(function (event) { return _this.stopEnterKeyPropogation(event); });
+                    this.valueInput.change(function () { return _this.academicFieldsVisibility(); });
+                }
+                OrganizationSearchControl.isQueryValid = function (query) {
+                    return query && query.length >= 3;
+                };
+                OrganizationSearchControl.highlightQueryTerms = function (stringToSearch, searchRegex) {
+                    return stringToSearch.replace(searchRegex, function (match) { return '<span class="elcn-search-match">' + match + '</span>'; });
+                };
+                OrganizationSearchControl.prototype.academicFieldsVisibility = function () {
+                    if (this.valueInput.val() || this.unlistedInfoInput.val()) {
+                        var parentThis = this;
+                        this.allMyDivs.each(function (index, curDiv) {
+                            var stayHidden = false;
+                            $.each(parentThis.conditionallyHidden, function (i) {
+                                if (this === curDiv) {
+                                    stayHidden = true;
+                                }
+                            });
+                            if (!stayHidden)
+                                $(this).show();
+                        });
+                        this.areWeHidden = false;
+                    }
+                    else if (!this.areWeHidden) {
+                        var parentThis = this;
+                        this.conditionallyHidden = [];
+                        this.allMyDivs.each(function () {
+                            // this is basically checking for display:none
+                            if ($(this).css('display') == 'none') {
+                                parentThis.conditionallyHidden.push(this);
+                            }
+                            $(this).hide();
+                        });
+                        this.areWeHidden = true;
+                    }
+                };
+                OrganizationSearchControl.prototype.search = function () {
+                    var _this = this;
+                    var query = this.queryInput.val();
+                    // Is the query long enough?
+                    if (OrganizationSearchControl.isQueryValid(query)) {
+                        var state_1 = this.stateInput.val();
+                        var country_1 = this.countryInput.val();
+                        // Don't perform the same search twice
+                        if (query != this.lastQuery || state_1 != this.lastState || country_1 != this.lastCountry) {
+                            this.lastQuery = query;
+                            this.lastState = state_1;
+                            this.lastCountry = country_1;
+                            if (this.timeout)
+                                window.clearTimeout(this.timeout);
+                            this.timeout = window.setTimeout(function () { return _this.searchInternal(query, country_1, state_1); }, 300);
+                        }
+                        else {
+                            this.resultsArea.show();
+                            this.notFoundButtonGroup.show();
+                        }
+                    }
+                    else {
+                        this.notFoundButtonGroup.hide();
+                        this.resultsArea.hide();
+                    }
+                };
+                OrganizationSearchControl.prototype.searchInternal = function (query, country, state) {
+                    var _this = this;
+                    this.timeout = null;
+                    var promise = Ellucian.Recruit.Mvc.Data.GetOrganizations(query, country == "0" ? "" : country, state == "0" ? "" : state, this.organizationView, this.orgType);
+                    promise.then(function (data, status, xhr) {
+                        _this.resultsArea.show();
+                        _this.resultsList.empty();
+                        _this.notFoundButtonGroup.show();
+                        if (data.IsSuccess) {
+                            if (data.Organizations.length == 0) {
+                                _this.resultsMessage.text(Ellucian.Recruit.Mvc._WR("OrganizationSearchNoResults"));
+                                _this.resultsHeader.hide();
+                            }
+                            else {
+                                var searchRegex_1 = new RegExp(query.split(/\s/).join("|"), "gi");
+                                if (data.OverPageLimit) {
+                                    //Change label for too many results to school or org base on org type
+                                    if (_this.orgType != _this._orgTypeHighSchool && _this.orgType != _this._orgTypeCollege) {
+                                        _this.resultsMessage.text(Mvc._WR("MVC_OrgSearchManyResults"));
+                                    }
+                                    else {
+                                        _this.resultsMessage.text(Mvc._WR("MVC_SchoolSearchManyResults"));
+                                    }
+                                }
+                                else {
+                                    _this.resultsMessage.text("");
+                                }
+                                _this.resultsHeader.show();
+                                // show select button
+                                $.each(data.Organizations, function (index, value) {
+                                    var item = OrganizationSearchControl.resultElement.clone();
+                                    var nameElement = item.find("h5");
+                                    item.attr("data-id", value.OrgId);
+                                    item.click(function (event) { return _this.select($(event.currentTarget)); });
+                                    item.keypress(function (event) {
+                                        if (event.keyCode == 13) {
+                                            event.stopPropagation();
+                                            _this.select($(event.currentTarget));
+                                            return false;
+                                        }
+                                    });
+                                    nameElement.attr("data-value", value.Name)
+                                        .html(OrganizationSearchControl.highlightQueryTerms(value.Name, searchRegex_1));
+                                    if (value.Location) {
+                                        var locationElement = item.find("p");
+                                        locationElement.attr("data-value", value.Location)
+                                            .html(OrganizationSearchControl.highlightQueryTerms(value.Location, searchRegex_1));
+                                    }
+                                    _this.resultsList.append(item);
+                                });
+                            }
+                        }
+                        else {
+                            _this.resultsMessage.text(data.Message);
+                            _this.resultsHeader.hide();
+                        }
+                    }, function (xhr, status, err) {
+                        _this.resultsHeader.hide();
+                        _this.resultsMessage.text(err);
+                    });
+                };
+                OrganizationSearchControl.prototype.select = function (item) {
+                    var location = item.find("p").attr("data-value");
+                    this.searchForm.hide();
+                    this.resultsArea.hide();
+                    this.instructions.hide();
+                    this.notFoundButtonGroup.hide();
+                    this.selectedOrg.show();
+                    this.selectedLabel.text(item.find("h5").attr("data-value") + (location ? " - " + location : ""));
+                    this.valueInput.val(item.attr("data-id"));
+                    this.selectedLabel.focus();
+                    this.academicFieldsVisibility();
+                    // Stop propagation (keep link from focusing top of screen)
+                    return false;
+                };
+                OrganizationSearchControl.prototype.clear = function () {
+                    //If you load the application tab and a school is already selected
+                    //and you hit the X then there is no previous search criteria entered.
+                    //This means we shouldn't show an empty search results area. 
+                    //But if you search for something, select a school, and then hit the X all the search criteria is there
+                    //So show the search results area since there are items listed.
+                    var existingSchoolsFound = this.resultsArea.find(".list-group-item").length;
+                    this.searchForm.show();
+                    this.instructions.show();
+                    if (existingSchoolsFound) {
+                        this.resultsArea.show();
+                        this.resultsHeader.show();
+                    }
+                    else {
+                        this.resultsArea.hide();
+                        this.notFoundButtonGroup.hide();
+                    }
+                    this.selectedOrg.hide();
+                    this.selectedLabel.text("");
+                    this.valueInput.val("");
+                    // Only show not found button if we just performed a search.
+                    if (this.resultsList.children().length > 0 || this.resultsMessage.text().length > 0)
+                        this.notFoundButtonGroup.show();
+                    this.academicFieldsVisibility();
+                };
+                OrganizationSearchControl.prototype.showUnlisted = function () {
+                    this.unlistedInfoField.show();
+                    this.lookupContainer.hide();
+                    if (this.isHomeSchoolChecked()) {
+                        this.goBackButtonRow.hide();
+                    }
+                    else {
+                        this.goBackButtonRow.show();
+                    }
+                };
+                OrganizationSearchControl.prototype.hideUnlisted = function () {
+                    this.unlistedInfoField.hide();
+                    this.unlistedInfoInput.val("");
+                    this.goBackButtonRow.hide();
+                    this.lookupContainer.show();
+                };
+                OrganizationSearchControl.prototype.loadStates = function () {
+                    var _this = this;
+                    var countrySelected = this.countryInput.val();
+                    var label = $("label[for='" + this.stateInput.attr("id") + "']");
+                    if (countrySelected == "0") {
+                        this.stateInput.val("0");
+                        this.stateInput.find("option:not([value='0'])").remove();
+                        label.hide();
+                        this.stateInput.hide();
+                    }
+                    else {
+                        Ellucian.Recruit.Mvc.Data.GetStates(countrySelected)
+                            .done(function (data) {
+                            _this.stateInput.val("0");
+                            _this.stateInput.find("option:not([value='0'])").remove();
+                            if (data.length > 0) {
+                                //make state visible
+                                label.show();
+                                _this.stateInput.show();
+                                $.each(data, function (index, value) {
+                                    _this.stateInput.append($('<option/>', {
+                                        value: value.Id,
+                                        text: value.Name
+                                    }));
+                                });
+                            }
+                            else {
+                                label.hide();
+                                _this.stateInput.hide();
+                            }
+                        })
+                            .fail(function (xhr, ajaxOptions, thrownError) {
+                        });
+                    }
+                };
+                OrganizationSearchControl.prototype.addGoBackButton = function () {
+                    var _this = this;
+                    var row = $("<div class='row'></div>");
+                    var button = $("<button type='button' class='btn btn-primary btn-md btn-auto elcn-show-school-search'></button>");
+                    if (this.orgType != this._orgTypeHighSchool && this.orgType != this._orgTypeCollege) {
+                        button.text(Mvc._WR("MVC_ShowOrgSearchButtonText"));
+                    }
+                    else {
+                        button.text(Mvc._WR("MVC_ShowSchoolSearchButtonText"));
+                    }
+                    button.click(function () {
+                        // Clear form in case "Unlisted High School" is the selected school.
+                        // This is possible if the student saves the form and navigates back.
+                        _this.clear();
+                        _this.hideUnlisted();
+                    });
+                    row.append($("<div class='col-md-12 field'></div>").append($("<div class='button-group'></div>").append(button)));
+                    row.insertAfter(this.lookupContainer.parent());
+                    return row;
+                };
+                OrganizationSearchControl.prototype.isHomeSchoolChecked = function () {
+                    return this.homeSchoolField && this.homeSchoolField.length > 0 && this.homeSchoolField.is(":checked");
+                };
+                OrganizationSearchControl.prototype.stopEnterKeyPropogation = function (event) {
+                    if (event.key == "Enter") {
+                        event.stopPropagation();
+                        return false;
+                    }
+                    else {
+                        return true;
+                    }
+                };
+                OrganizationSearchControl.resultElement = $("<a href='#' class='list-group-item list-group-item-action flex-column align-items-start'> \n                <h5 class=\"mb-1\"></h5>\n                <p class=\"mb-1\"></p>\n            </a>");
+                return OrganizationSearchControl;
+            }());
+            Mvc.OrganizationSearchControl = OrganizationSearchControl;
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+//# sourceMappingURL=recruit.common.js.map

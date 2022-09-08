@@ -1,0 +1,228 @@
+﻿/* Badges/Notifications */
+.recruit-navbar {
+  background-color: #5353d1;
+  border-radius: 0px;
+  border: none;
+  border-bottom-color: #51abff;
+  border-bottom-width: 4px;
+  border-bottom-style: solid;
+  margin: 0px;
+  text-transform: uppercase;
+  height: 60px;
+  z-index: 1000; }
+  .recruit-navbar > div {
+    height: 60px;
+    padding-right: 0px; }
+
+.navbar-nav > li > a {
+  line-height: 28px !important; }
+
+.navbar-brand {
+  padding: 0; }
+
+.navbar-brand > img {
+  height: 100%; }
+
+.navbar-header {
+  height: 60px; }
+
+/* Link */
+.recruit-navbar .navbar-nav > li > a {
+  color: #ffffff;
+  background-color: #5353d1;
+  height: 56px; }
+
+.recruit-navbar .navbar-nav > li > a:hover,
+.recruit-navbar .navbar-nav > li > a:focus {
+  background-color: #5353d1;
+  color: #ffffff; }
+
+.recruit-navbar .navbar-nav > li > form {
+  color: #ffffff;
+  background-color: #5353d1;
+  height: 56px; }
+
+.recruit-navbar .navbar-nav > li > form > a:hover,
+.recruit-navbar .navbar-nav > li > form > a:focus {
+  background-color: #5353d1;
+  color: #ffffff; }
+
+@media (min-width: 768px) {
+  .recruit-navbar .main-navbar > li:hover:after,
+  .recruit-navbar .main-navbar > li.active:after {
+    width: 25px;
+    height: 12.5px;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    background-color: #51abff;
+    content: " ";
+    position: absolute;
+    left: calc(50% - 12.5px);
+    bottom: -4px; }
+  .recruit-navbar .main-navbar li a.active-collapsed::before {
+    content: '\f111';
+    margin-left: -15px;
+    font-family: FontAwesome;
+    font-weight: normal;
+    font-style: normal;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 10px;
+    line-height: 18px;
+    vertical-align: middle;
+    margin-right: 5px;
+    width: 10px; } }
+
+.recruit-navbar .navbar-nav > .active > a,
+.recruit-navbar .navbar-nav > .active > a:hover,
+.recruit-navbar .navbar-nav > .active > a:focus {
+  color: #ffffff;
+  background-color: #5353d1; }
+
+.form-link {
+  display: block;
+  padding: 3px 20px;
+  clear: both;
+  font-weight: normal;
+  line-height: 1.42857143;
+  white-space: nowrap; }
+
+.form-link > a {
+  text-decoration: none;
+  color: #333; }
+
+.dropdown-menu > li > .form-link:hover,
+.dropdown-menu > li > .form-link:focus {
+  color: #ffffff;
+  text-decoration: none;
+  background-color: #51abff; }
+
+/*.elcn-navbar-header {
+    display: flex;
+    display: -ms-flexbox;
+    align-items: center;
+    -ms-flex-item-align: center;
+    -ms-flex-align: center;
+    height: $navheader;
+    margin-left: 5px !important;
+}*/
+.recruit-navbar-logo {
+  background-image: url("../Content/images/ellucian_logo.svg");
+  background-repeat: no-repeat;
+  background-position-y: center;
+  background-position-x: 20px;
+  width: 180px;
+  float: left;
+  height: 60px; }
+
+li.user-drop-down a.dropdown-toggle {
+  max-width: 250px; }
+
+li.collapsed-nav {
+  display: none; }
+
+.user-dropdown {
+  min-width: 120px; }
+
+.user-settings {
+  background-image: url("../Content/images/user_anticon.png");
+  background-repeat: no-repeat;
+  background-position-y: 5px;
+  margin-left: 10px;
+  cursor: pointer;
+  display: inline-block;
+  width: 25px;
+  height: 40px;
+  float: left; }
+
+.user-name {
+  padding: 0px 10px 0px 5px;
+  text-transform: none;
+  font-weight: 600;
+  font-size: 1.0em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 185px;
+  display: inline-block; }
+
+.recruit-navbar .navbar-right > li > a {
+  color: #ffffff;
+  height: 56px;
+  background-color: rgba(21, 22, 24, 0.15); }
+
+.recruit-navbar .navbar-right > li > a:hover,
+.recruit-navbar .navbar-right > li > a:focus {
+  background-color: rgba(21, 22, 24, 0.15);
+  color: #ffffff; }
+
+.recruit-navbar .navbar-right > a,
+.recruit-navbar .navbar-right > a:hover,
+.recruit-navbar .navbar-right > a:focus {
+  color: #ffffff;
+  background-color: #4e25d4; }
+
+.navbar-nav > li > .dropdown-menu {
+  background-color: #5353d1;
+  top: calc(100% + 3px); }
+  .navbar-nav > li > .dropdown-menu li {
+    padding: 5px; }
+  .navbar-nav > li > .dropdown-menu li:hover {
+    background-color: #51abff; }
+  .navbar-nav > li > .dropdown-menu li a {
+    color: #ffffff;
+    width: 100%;
+    display: inline-block; }
+  .navbar-nav > li > .dropdown-menu li a:hover {
+    background-color: transparent !important; }
+
+.open {
+  *z-index: 1000; }
+
+/*Mobile Header bar*/
+.white, .white a {
+  color: #ffffff; }
+
+/* More Links Collapse */
+ul.more-menu {
+  float: right;
+  right: -50%;
+  left: auto;
+  max-width: 500px; }
+  ul.more-menu a {
+    text-overflow: ellipsis;
+    overflow: hidden; }
+
+li.collapsed-nav a.dropdown-toggle::after {
+  position: relative;
+  top: 1px;
+  display: inline-block;
+  font-family: 'Glyphicons Halflings';
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  content: "\e252";
+  font-size: 10px;
+  margin-left: 5px; }
+
+@media (max-width: 767px) {
+  .navbar-nav {
+    margin-top: 0px;
+    border: 0px; }
+  #recruit-nav-components {
+    border: 0px; }
+  .navbar-toggle {
+    margin-right: 0;
+    width: 40px; }
+  .form-link {
+    display: block;
+    padding: 3px 18px;
+    clear: both; }
+  .form-link > a:link {
+    text-decoration: none;
+    color: #ffffff;
+    line-height: 3; }
+  /* Override a margin setting that yields a few px of overflow empty space on mobile (helps remove horiz scrollbars). */
+  .container > .navbar-header, .container-fluid > .navbar-header, .container > .navbar-collapse, .container-fluid > .navbar-collapse {
+    margin-right: 0; } }

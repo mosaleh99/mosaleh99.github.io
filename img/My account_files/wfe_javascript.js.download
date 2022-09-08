@@ -1,0 +1,50 @@
+// RMS-5859, 6314 Automatically upload selected document on the Recommendation (referee) forms, document on supplemental items and conditions
+$(document).ready(function () {
+    $("#attachment-container").change(function (e) { $(".recommendation-upload-button").click(); });
+	$("#supplemental-items-container").change(function (e) { $(".supplemental-upload-button").click(); });
+	$("#supplemental-conditions-container").change(function (e) { $(".supplemental-upload-button").click(); });
+});
+
+// RMS-6097 Add phone number validator to Recruit
+
+var fileref = document.createElement("link");
+fileref.setAttribute("rel", "stylesheet");
+fileref.setAttribute("type", "text/css");
+fileref.setAttribute("href", "/paymentgateway/resources/intlPhone/intlTelInput-17.0.0.css");
+document.head.appendChild(fileref);
+
+$(document).ready(function() {
+    var telInput = document.querySelector(".USask_Phone input");
+    var telError = document.querySelector(".USask_Phone .field-validation-valid");
+
+    if (telInput) {
+        var iti = window.intlTelInput(telInput, {
+            preferredCountries: ['ca', 'us'],
+            nationalMode: false,
+            formatOnDisplay: true,
+            separateDialCode: false,
+            utilsScript: '/paymentgateway/resources/intlPhone/utils-17.0.0.js'
+        });
+
+        telInput.addEventListener('blur', function () {
+            if (telInput.value.trim()) {
+                var iti = window.intlTelInput(telInput, {
+                    preferredCountries: ['ca', 'us'],
+                    nationalMode: false,
+                    formatOnDisplay: true,
+                    separateDialCode: false,
+                    utilsScript: '/paymentgateway/resources/intlPhone/utils-17.0.0.js'
+                });
+                if (iti.isValidNumber()) {
+                    telError.innerHTML = "";
+                    telError.setAttribute("class", "field-validation-valid");
+                    telInput.setAttribute("aria-invalid", false);
+                } else {
+                    telError.innerHTML = "Select your country and follow the format displayed starting with a '+'";
+                    telError.setAttribute("class", "field-validation-error");
+                    telInput.setAttribute("aria-invalid", true);
+                }
+            }
+        });
+    }
+});

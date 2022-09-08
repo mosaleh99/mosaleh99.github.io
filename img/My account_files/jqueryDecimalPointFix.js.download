@@ -1,0 +1,16 @@
+﻿/* JQuery.validate.js has an issue where it doesn't allow the comma for a thousands separator on numbers. 
+ * So this JS is loaded when the culture name is not ES to fix client-side vaidation on numbers and currencies
+ */
+
+$.validator.methods.range = function (value, element, param) {
+	//Remove commas when validating a number so jquery can validate if it is between the ranges listed in param[x].  (EX) 5,000.25   becomes   5000.25
+	//jquery will say the number is out of range if it has a comma
+	var globalizedValue = value.replace(",", "");
+
+	return this.optional(element) || (globalizedValue >= param[0] && globalizedValue <= param[1]);
+}
+
+$.validator.methods.number = function (value, element) {
+	//Notice how this allows for "," to be used for thousand separators and "." for the decimal separtor
+	return this.optional(element) || /^-?(?:\d+|\d{1,3}(?:[\s,]\d{3})+)(?:[\.]\d+)?$/.test(value);
+}

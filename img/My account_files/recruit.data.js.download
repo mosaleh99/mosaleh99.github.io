@@ -1,0 +1,105 @@
+/// <reference path="../typings/jquery/jquery.d.ts" />
+/**
+* Namespace that wraps data transactions for Recruit.
+* @module
+*/
+var Ellucian;
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var Data;
+            (function (Data) {
+                /**
+                 * The base path of the web application.
+                 */
+                Data.BasePath = null;
+                /**
+                 * The root folder of the site. If the URL is http://abc.com/MVC/ then this value is 'MVC'.
+                 */
+                Data.AppRootFolder = null;
+                /**
+                 * Retrieves a list of countries.
+                 * @returns {Object} An AJAX promise.
+                 */
+                function GetCountries() {
+                    var $url = Data.BasePath + "/Organization/GetCountries";
+                    return $.ajax({
+                        url: $url,
+                        type: "GET",
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json"
+                    });
+                }
+                Data.GetCountries = GetCountries;
+                /**
+                * Retrieves a list of countries.
+                * @returns {Object} An AJAX promise.
+                */
+                function GetStates(country) {
+                    var $url = Data.BasePath + "/Organization/GetStates";
+                    return $.ajax({
+                        url: $url,
+                        type: "POST",
+                        data: "{guid:'" + country + "'}",
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json"
+                    });
+                }
+                Data.GetStates = GetStates;
+                /**
+                * Retrieves a list of events.
+                * @returns {Object} An AJAX promise.
+                */
+                function GetEvents() {
+                    var $url = Data.BasePath + "/Events/GetEvents";
+                    return $.ajax({
+                        url: $url,
+                        type: "GET",
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json"
+                    });
+                }
+                Data.GetEvents = GetEvents;
+                /**
+                 * Retrieves second choice programs given an application ID and an optional level
+                 * @param level The academic level ID, if its field exists on this tab.
+                 * @param application The application ID.
+                 * @param programViewId The default view that is set on the lookup properties on the academic program subform form
+                 */
+                function GetSecondChoicePrograms(program, application, programViewId) {
+                    var query = { ApplicationId: application };
+                    if (program)
+                        query["CurrentProgramId"] = program;
+                    if (programViewId)
+                        query["ProgramViewId"] = programViewId;
+                    return $.ajax({
+                        url: Data.BasePath + "/Program/SecondChoice",
+                        type: "POST",
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        data: JSON.stringify(query)
+                    });
+                }
+                Data.GetSecondChoicePrograms = GetSecondChoicePrograms;
+                /**
+              * Retrieves a list of organization results based on the search criteria.
+              * @returns {Object} An AJAX promise.
+              */
+                function GetOrganizations(query, countryfield, statefield, view, orgType) {
+                    var $url = Data.BasePath + "/Organization/SearchOrganizationCode";
+                    return $.ajax({
+                        url: $url,
+                        type: "POST",
+                        data: JSON.stringify({ search: query, countryGuid: countryfield, stateGuid: statefield, organizationViewID: view, orgType: orgType }),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json"
+                    });
+                }
+                Data.GetOrganizations = GetOrganizations;
+            })(Data = Mvc.Data || (Mvc.Data = {}));
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+//# sourceMappingURL=recruit.data.js.map

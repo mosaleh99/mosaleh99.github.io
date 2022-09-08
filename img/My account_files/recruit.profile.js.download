@@ -1,0 +1,66 @@
+$(document).ready(function () {
+    //handle expand/collapse toggle for apps that need attention
+    Ellucian.Recruit.Mvc.Profile.ToggleAttentionApps();
+    //spinner transition to application
+    $("a.elcn-application-link").click(function (e) {
+        Ellucian.Recruit.Mvc.ShowSpinner($(".application-list"));
+    });
+    //Hide the row in a form if there's no field content in My Account page
+    $('form > div.print.crm-form > div.tab > div.section.container > div.row').not(':has(.field)').css("display", "none");
+    //Set the width for profile fields
+    Ellucian.Recruit.Mvc.Profile.SetFieldWidth();
+    $(window).resize(function () {
+        Ellucian.Recruit.Mvc.Profile.SetFieldWidth();
+    });
+});
+var Ellucian;
+(function (Ellucian) {
+    var Recruit;
+    (function (Recruit) {
+        var Mvc;
+        (function (Mvc) {
+            var Profile;
+            (function (Profile) {
+                /**
+                 * Handles toggling of the '>' more information item for applications that need attention.
+                 */
+                function ToggleAttentionApps() {
+                    $("a.app-attention-toggle").click(function (e) {
+                        e.preventDefault();
+                        var a = $(e.target);
+                        var span = a.children().first();
+                        if (span.hasClass("expanded")) {
+                            span.removeClass("expanded");
+                            var row = a.closest("tr").next("tr");
+                            if (row.length > 0 && row.hasClass("attention-msg"))
+                                row.hide();
+                        }
+                        else {
+                            span.addClass("expanded");
+                            var row = a.closest("tr").next("tr");
+                            if (row.length > 0 && row.hasClass("attention-msg"))
+                                row.show();
+                        }
+                    });
+                    $("a.attention-badge").click(function (e) {
+                        e.preventDefault();
+                        if (Ellucian.Recruit.Mvc.IsMobile)
+                            return;
+                        var expander = $(e.target).closest("tr").children().first().find("a.app-attention-toggle");
+                        if (expander.length === 1 && !expander.children().first().hasClass("expanded"))
+                            expander.click();
+                    });
+                }
+                Profile.ToggleAttentionApps = ToggleAttentionApps;
+                function SetFieldWidth() {
+                    var spanWidth = $("form > div.print.crm-form > div.tab > div.section.container > div.row").width();
+                    $('form > div.print.crm-form > div.profile.tab > div.section.container > div.row > div.field > span').width(spanWidth);
+                    var cardWidth = $('.start-application').width() - 20;
+                    $('.start-application-container').width(cardWidth);
+                }
+                Profile.SetFieldWidth = SetFieldWidth;
+            })(Profile = Mvc.Profile || (Mvc.Profile = {}));
+        })(Mvc = Recruit.Mvc || (Recruit.Mvc = {}));
+    })(Recruit = Ellucian.Recruit || (Ellucian.Recruit = {}));
+})(Ellucian || (Ellucian = {}));
+//# sourceMappingURL=recruit.profile.js.map
